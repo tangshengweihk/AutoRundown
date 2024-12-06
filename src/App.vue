@@ -14,6 +14,7 @@ const timer = ref(null)
 const currentTime = ref(0)
 const countdownDisplay = ref('')
 const isTimerRunning = ref(false)
+const isAutoMode = ref(true)
 
 const triggerFileInput = () => {
   fileInput.value.click()
@@ -119,7 +120,7 @@ const formatTime = (totalSeconds) => {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
 }
 
-// 处理行点击事件
+// 修改处理行点击事件
 const handleRowClick = (index) => {
   // 清除现有计时器
   if (timer.value) {
@@ -127,7 +128,7 @@ const handleRowClick = (index) => {
   }
   
   selectedRowIndex.value = index
-  const duration = parseTime(tableData.value[index].data[3]) // 获取时长列的值
+  const duration = parseTime(tableData.value[index].data[3])
   
   if (duration > 0) {
     currentTime.value = duration
@@ -141,12 +142,17 @@ const handleRowClick = (index) => {
       if (currentTime.value <= 0) {
         clearInterval(timer.value)
         isTimerRunning.value = false
-        // 自动切换到下一行
-        if (selectedRowIndex.value < tableData.value.length - 1) {
+        // 只在自动模式下跳转到下一行
+        if (isAutoMode.value && selectedRowIndex.value < tableData.value.length - 1) {
           handleRowClick(selectedRowIndex.value + 1)
         }
       }
     }, 1000)
+  } else {
+    // 只在自动模式下跳转空时长的行
+    if (isAutoMode.value && index < tableData.value.length - 1) {
+      handleRowClick(index + 1)
+    }
   }
 }
 
@@ -186,6 +192,15 @@ onUnmounted(() => {
           {{ role }}
         </option>
       </select>
+      
+      <div class="mode-switch">
+        <label class="switch">
+          <input type="checkbox" v-model="isAutoMode">
+          <span class="slider round"></span>
+        </label>
+        <span class="mode-label">{{ isAutoMode ? '自动' : '手动' }}</span>
+      </div>
+
       <button @click="triggerFileInput">选择 Excel 文件</button>
     </div>
 
@@ -506,5 +521,62 @@ th[colspan] {
 /* 确保高亮格子的动画效果 */
 .active-row td {
   transition: all 0.3s ease;
+}
+
+/* 添加开关样式 */
+.mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mode-label {
+  color: #fff;
+  font-size: 14px;
+}
+
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 50px;
+  height: 24px;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+  border-radius: 24px;
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .slider {
+  background-color: #4CAF50;
+}
+
+input:checked + .slider:before {
+  transform: translateX(26px);
 }
 </style>
