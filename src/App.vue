@@ -7,12 +7,23 @@ const tableData = ref([])
 const tableHeaders = ref([])
 const sheets = ref([])
 const currentSheet = ref('')
-const timer = ref(null)
 const currentRole = ref('无')
 const roles = ['无', '字幕', '音控', '放像']
+const selectedRowIndex = ref(null)
+const timer = ref(null)
+const currentTime = ref(0)
+const countdownDisplay = ref('')
+const isTimerRunning = ref(false)
 
 const triggerFileInput = () => {
   fileInput.value.click()
+}
+
+const roleColumns = {
+  '字幕': 6,
+  '音控': 7,
+  '放像': 8,
+  '无': null
 }
 
 const loadSheet = (workbook, sheetName) => {
@@ -40,40 +51,12 @@ const loadSheet = (workbook, sheetName) => {
       '备注'
     ]
     
-    const roleColumns = {
-      '字幕': 6,
-      '音控': 7,
-      '放像': 8
-    }
-    
     tableData.value = rawData.slice(1).map(row => {
-      const now = new Date()
-      const currentTime = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds()
-      
-      const parseTime = (timeStr) => {
-        if (!timeStr) return null
-        const [hours, minutes, seconds] = timeStr.split(':').map(Number)
-        return hours * 3600 + minutes * 60 + (seconds || 0)
-      }
-      
-      const startTime = parseTime(row[1])
-      const endTime = parseTime(row[2])
-      
-      const isActive = startTime !== null && 
-                      endTime !== null && 
-                      currentTime >= startTime && 
-                      currentTime <= endTime
-
       const limitedRow = row.slice(0, 10)
-      
       return {
-        data: limitedRow.map((cell, index) => cell || ''),
-        isActive,
-        roleColumn: roleColumns[currentRole.value]
+        data: limitedRow.map((cell, index) => cell || '')
       }
     })
-    
-    setTimeout(scrollToActiveRow, 100)
   }
 }
 
@@ -108,57 +91,66 @@ const handleFileChange = (event) => {
   reader.readAsArrayBuffer(file)
 }
 
-const updateActiveStatus = () => {
-  if (!window.currentWorkbook || !currentSheet.value) return
+// 修改解析时间函数,支持时:分:秒格式
+const parseTime = (timeStr) => {
+  if (!timeStr) return 0
+  const parts = timeStr.split(':').map(Number)
+  if (parts.length === 3) {
+    // 时:分:秒 格式
+    const [hours, minutes, seconds] = parts
+    return hours * 3600 + minutes * 60 + seconds
+  } else if (parts.length === 2) {
+    // 分:秒 格式
+    const [minutes, seconds] = parts
+    return minutes * 60 + seconds
+  }
+  return 0
+}
+
+// 修改格式化函数,支持时:分:秒格式
+const formatTime = (totalSeconds) => {
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
   
-  // 保存当前的活动行
-  const previousActiveRow = document.querySelector('.active-row')
-  const previousRowIndex = previousActiveRow ? 
-    Array.from(previousActiveRow.parentElement.children).indexOf(previousActiveRow) : -1
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+  }
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+}
+
+// 处理行点击事件
+const handleRowClick = (index) => {
+  // 清除现有计时器
+  if (timer.value) {
+    clearInterval(timer.value)
+  }
   
-  loadSheet(window.currentWorkbook, currentSheet.value)
+  selectedRowIndex.value = index
+  const duration = parseTime(tableData.value[index].data[3]) // 获取时长列的值
   
-  // 获取新的活动行
-  const newActiveRow = document.querySelector('.active-row')
-  const newRowIndex = newActiveRow ? 
-    Array.from(newActiveRow.parentElement.children).indexOf(newActiveRow) : -1
-  
-  // 只有当活动行改变时才滚动
-  if (previousRowIndex !== newRowIndex) {
-    setTimeout(scrollToActiveRow, 100)
+  if (duration > 0) {
+    currentTime.value = duration
+    countdownDisplay.value = formatTime(currentTime.value)
+    isTimerRunning.value = true
+    
+    timer.value = setInterval(() => {
+      currentTime.value--
+      countdownDisplay.value = formatTime(currentTime.value)
+      
+      if (currentTime.value <= 0) {
+        clearInterval(timer.value)
+        isTimerRunning.value = false
+        // 自动切换到下一行
+        if (selectedRowIndex.value < tableData.value.length - 1) {
+          handleRowClick(selectedRowIndex.value + 1)
+        }
+      }
+    }, 1000)
   }
 }
 
-// 添加滚动到活动行的函数
-const scrollToActiveRow = () => {
-  const activeRow = document.querySelector('.active-row')
-  const container = document.querySelector('.table-container')
-  if (activeRow && container) {
-    const containerHeight = container.clientHeight
-    const rowHeight = activeRow.clientHeight
-    const activeRowTop = activeRow.offsetTop
-    
-    // 将高亮行位置调整到更靠近顶部，只留出少量空间
-    const targetScroll = activeRowTop - (containerHeight * 0.1) // 改为容器高度的10%
-    
-    // 减小缓冲区大小，使滚动更精确
-    const buffer = containerHeight / 8
-    const isInTarget = Math.abs(container.scrollTop - targetScroll) < buffer
-    
-    if (!isInTarget) {
-      container.scrollTo({
-        top: Math.max(0, targetScroll),
-        behavior: 'smooth'
-      })
-    }
-  }
-}
-
-onMounted(() => {
-  timer.value = setInterval(updateActiveStatus, 1000)
-  setTimeout(scrollToActiveRow, 500)
-})
-
+// 组件卸载时清理计时器
 onUnmounted(() => {
   if (timer.value) {
     clearInterval(timer.value)
@@ -168,6 +160,12 @@ onUnmounted(() => {
 
 <template>
   <div>
+    <div v-if="isTimerRunning" 
+         class="countdown"
+         :class="{ 'countdown-warning': currentTime <= 10, 'countdown-normal': currentTime > 10 }">
+      {{ countdownDisplay }}
+    </div>
+    
     <div class="controls">
       <select 
         v-if="sheets.length" 
@@ -183,7 +181,6 @@ onUnmounted(() => {
         v-if="tableData.length"
         v-model="currentRole"
         class="role-select"
-        @change="updateActiveStatus"
       >
         <option v-for="role in roles" :key="role" :value="role">
           {{ role }}
@@ -221,13 +218,14 @@ onUnmounted(() => {
         <tbody>
           <tr v-for="(row, rowIndex) in tableData" 
               :key="rowIndex"
-              :class="{ 'active-row': row.isActive }">
+              :class="{ 'active-row': rowIndex === selectedRowIndex }"
+              @click="handleRowClick(rowIndex)">
             <td v-for="(cell, cellIndex) in row.data" 
                 :key="cellIndex"
                 :class="{
-                  'highlight-cell': row.isActive && 
-                                  currentRole !== '无' && 
-                                  cellIndex === row.roleColumn
+                  'highlight-cell': currentRole !== '无' && 
+                                   cellIndex === roleColumns[currentRole] &&
+                                   rowIndex === selectedRowIndex
                 }">
               {{ cell }}
             </td>
@@ -362,11 +360,16 @@ td {
 }
 
 .highlight-cell {
-  background: rgba(255, 69, 58, 0.95) !important;
+  background: rgba(255, 69, 58, 1) !important;
   color: #ffffff !important;
   font-weight: bold;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
-  box-shadow: inset 0 0 10px rgba(255, 255, 255, 0.1);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+  box-shadow: 
+    inset 0 0 20px rgba(255, 255, 255, 0.2), 
+    0 0 15px rgba(255, 69, 58, 0.6);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  transform: scale(1.05);
+  transition: all 0.3s ease;
 }
 
 tbody tr:not(.active-row):hover {
@@ -457,5 +460,51 @@ td.truncate {
 /* 确保合并的单元格样式正确 */
 th[colspan] {
   text-align: center;
+}
+
+.countdown {
+  position: fixed;
+  top: 85%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 48px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+  background: rgba(0, 0, 0, 0.1);
+  padding: 20px 40px;
+  border-radius: 15px;
+  z-index: 1000;
+  backdrop-filter: blur(5px);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.countdown-normal {
+  transform: translateX(-50%) scale(1);
+}
+
+.countdown-warning {
+  color: #ff3b30;
+  animation: warning-pulse 1s infinite;
+}
+
+@keyframes warning-pulse {
+  0% {
+    transform: translateX(-50%) scale(1);
+    text-shadow: 0 0 10px rgba(255, 59, 48, 0.5);
+  }
+  50% {
+    transform: translateX(-50%) scale(1.05);
+    text-shadow: 0 0 20px rgba(255, 59, 48, 0.8);
+  }
+  100% {
+    transform: translateX(-50%) scale(1);
+    text-shadow: 0 0 10px rgba(255, 59, 48, 0.5);
+  }
+}
+
+/* 确保高亮格子的动画效果 */
+.active-row td {
+  transition: all 0.3s ease;
 }
 </style>
