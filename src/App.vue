@@ -27,12 +27,23 @@ const loadSheet = (workbook, sheetName) => {
   const rawData = XLSX.utils.sheet_to_json(sheet, options)
   
   if (rawData.length > 0) {
-    tableHeaders.value = rawData[0]
+    tableHeaders.value = [
+      '序号',
+      '开始时间',
+      '结束时间',
+      '时长',
+      '副标题',
+      '内容',
+      '字幕包装',
+      '音控',
+      '放像',
+      '备注'
+    ]
     
     const roleColumns = {
-      '字幕': 5,  // 改为第7列 (索引从0开始，所以是5)
-      '音控': 6,  // 改为第8列 (索引从0开始，所以是6)
-      '放像': 7   // 改为第9列 (索引从0开始，所以是7)
+      '字幕': 6,
+      '音控': 7,
+      '放像': 8
     }
     
     tableData.value = rawData.slice(1).map(row => {
@@ -53,8 +64,10 @@ const loadSheet = (workbook, sheetName) => {
                       currentTime >= startTime && 
                       currentTime <= endTime
 
+      const limitedRow = row.slice(0, 10)
+      
       return {
-        data: row.map((cell, index) => cell || ''),
+        data: limitedRow.map((cell, index) => cell || ''),
         isActive,
         roleColumn: roleColumns[currentRole.value]
       }
@@ -193,14 +206,15 @@ onUnmounted(() => {
       <table>
         <thead>
           <tr>
-            <th>序号/No.</th>
-            <th>时间/TIME</th>
-            <th>时长/DUR</th>
-            <th>章节/Chapter</th>
-            <th>内容/Description</th>
-            <th>字幕包/Graphics</th>
-            <th>音控/Audio</th>
-            <th>放像/VCR</th>
+            <th>序号</th>
+            <th>开始时间</th>
+            <th>结束时间</th>
+            <th>时长</th>
+            <th>副标题</th>
+            <th>内容</th>
+            <th>字幕包装</th>
+            <th>音控</th>
+            <th>放像</th>
             <th>备注</th>
           </tr>
         </thead>
@@ -284,21 +298,14 @@ body {
 }
 
 .table-container {
-  height: 90vh;
-  overflow-y: auto;
-  margin-top: 1rem;
-  background-color: rgba(40, 40, 40, 0.5);
-  border-radius: 8px;
-  padding: 0;
-  position: relative;
+  width: 100%;
+  max-width: 1600px;
+  margin: 1rem auto;
+  overflow-x: auto;
 }
 
 table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-  margin: 0;
-  table-layout: fixed;
+  min-width: 1200px;
 }
 
 thead {
@@ -308,15 +315,16 @@ thead {
   background: #2c5282;
 }
 
-th:nth-child(1) { width: 6%; }
+th:nth-child(1) { width: 5%; }
 th:nth-child(2) { width: 8%; }
 th:nth-child(3) { width: 8%; }
-th:nth-child(4) { width: 10%; }
-th:nth-child(5) { width: 25%; }
-th:nth-child(6) { width: 10%; }
-th:nth-child(7) { width: 11%; }
+th:nth-child(4) { width: 6%; }
+th:nth-child(5) { width: 10%; }
+th:nth-child(6) { width: 22%; }
+th:nth-child(7) { width: 13%; }
 th:nth-child(8) { width: 11%; }
 th:nth-child(9) { width: 11%; }
+th:nth-child(10) { width: 6%; }
 
 thead th {
   padding: 15px 8px;
@@ -444,5 +452,10 @@ td.truncate {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 确保合并的单元格样式正确 */
+th[colspan] {
+  text-align: center;
 }
 </style>
