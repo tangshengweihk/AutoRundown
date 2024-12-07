@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import * as XLSX from 'xlsx'
 
 const fileInput = ref(null)
@@ -122,13 +122,26 @@ const formatTime = (totalSeconds) => {
 
 // 修改处理行点击事件
 const handleRowClick = (index) => {
-  // 清除现有计时器
   if (timer.value) {
     clearInterval(timer.value)
   }
   
   selectedRowIndex.value = index
   const duration = parseTime(tableData.value[index].data[3])
+  
+  // 简化后的滚动逻辑
+  nextTick(() => {
+    const rows = document.querySelectorAll('.table-container tbody tr')
+    const container = document.querySelector('.table-container')
+    
+    if (rows[index] && container) {
+      const targetScroll = rows[index].offsetTop - (container.clientHeight / 2) + (rows[index].offsetHeight / 2)
+      container.scrollTo({
+        top: targetScroll,
+        behavior: 'smooth'
+      })
+    }
+  })
   
   if (duration > 0) {
     currentTime.value = duration
@@ -142,14 +155,12 @@ const handleRowClick = (index) => {
       if (currentTime.value <= 0) {
         clearInterval(timer.value)
         isTimerRunning.value = false
-        // 只在自动模式下跳转到下一行
         if (isAutoMode.value && selectedRowIndex.value < tableData.value.length - 1) {
           handleRowClick(selectedRowIndex.value + 1)
         }
       }
     }, 1000)
   } else {
-    // 只在自动模式下跳转空时长的行
     if (isAutoMode.value && index < tableData.value.length - 1) {
       handleRowClick(index + 1)
     }
@@ -315,10 +326,19 @@ body {
   max-width: 1600px;
   margin: 1rem auto;
   overflow-x: auto;
+  overflow-y: scroll;
+  height: calc(100vh - 200px);
+  position: relative;
 }
 
 table {
-  min-width: 1200px;
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0;
+}
+
+tbody tr {
+  height: 50px;
 }
 
 thead {
